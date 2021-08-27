@@ -1,0 +1,19 @@
+name: LnVault
+version: 1.0
+main: com.lnvault.LnVault
+api-version: 1.17
+depend: [Vault]
+
+commands:
+   lndeposit:
+      description: Lightning Network Deposit
+      usage: /lndeposit $
+      permission: lnvault.deposit
+   lnwithdraw:
+      description: Lightning Network Withdrawal
+      usage: /lnwithdraw $
+      permission: lnvault.withdraw
+   lnconfig:
+      description: Lightning Network Config
+      usage: /lnconfig [get|set] name [value]
+      permission: lnvault.config

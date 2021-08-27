@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Generator: Adobe Fireworks 10, Export SVG Extension by Aaron Beall (http://fireworks.abeall.com) . Version: 0.6.1  -->
+
+<svg
+   id="bitcoin_lightning_icon.fw-Page%201"
+   viewBox="0 0 128 128"
+   version="1.1"
+   xml:space="preserve"
+   x="0px"
+   y="0px"
+   width="128"
+   height="128"
+   sodipodi:docname="lnvault.svg"
+   inkscape:version="1.1 (c4e8f9ed74, 2021-05-24)"
+   inkscape:export-filename="lnvault.png"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"><defs
+   id="defs1683"><rect
+     x="23.333717"
+     y="-42.036621"
+     width="350.73553"
+     height="53.316841"
+     id="rect4160" /></defs><sodipodi:namedview
+   id="namedview1681"
+   pagecolor="#ffffff"
+   bordercolor="#666666"
+   borderopacity="1.0"
+   inkscape:pageshadow="2"
+   inkscape:pageopacity="0.0"
+   inkscape:pagecheckerboard="0"
+   showgrid="false"
+   width="128px"
+   inkscape:zoom="1.4857143"
+   inkscape:cx="-94.230769"
+   inkscape:cy="145.38462"
+   inkscape:window-width="2560"
+   inkscape:window-height="1006"
+   inkscape:window-x="0"
+   inkscape:window-y="0"
+   inkscape:window-maximized="1"
+   inkscape:current-layer="bitcoin_lightning_icon.fw-Page%201" />
+	
+	<g
+   id="g24312"
+   transform="translate(2.0192307,-0.67307692)"><rect
+     style="fill:#ffffff;fill-opacity:1;stroke-width:1.00157"
+     id="rect24403"
+     width="128"
+     height="128"
+     x="-0.87285095"
+     y="0.97656554" /><path
+     id="Ellipse"
+     d="m 21.53991,47.888602 c 0,-23.51268 19.060223,-42.5729033 42.572901,-42.5729033 23.512683,0 42.572899,19.0602233 42.572899,42.5729033 0,23.512678 -19.060216,42.572907 -42.572899,42.572907 -23.512678,0 -42.572901,-19.060229 -42.572901,-42.572907 z"
+     fill="#f7931a"
+     style="fill:#6d3699;fill-opacity:1;stroke-width:0.318898" /><path
+     d="m 70.712183,19.506666 c -2.538238,6.588659 -5.076444,13.684143 -8.1223,20.779627 0,0 0,1.013647 1.015273,1.013647 h 20.813398 c 0,0 0,0.506826 0.50769,1.013652 L 54.467579,76.270534 C 53.959924,75.763712 53.959924,75.256886 53.959924,74.75006 L 64.620466,51.943169 v -2.0273 H 43.299382 V 47.888602 L 69.189255,19.506666 Z"
+     fill="#ffffff"
+     id="path1678"
+     style="stroke-width:0.318898" /></g>
+<text
+   xml:space="preserve"
+   id="text4158"
+   style="font-size:24px;line-height:125%;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';text-align:center;writing-mode:lr-tb;white-space:pre;shape-inside:url(#rect4160);fill:#000001;fill-opacity:1;stroke-width:1.00157"
+   transform="matrix(1.1351394,0,0,1.1351394,-159.651,142.57836)"><tspan
+     x="154.13477"
+     y="-20.802734"
+     id="tspan33370">LnVault</tspan></text></svg>
