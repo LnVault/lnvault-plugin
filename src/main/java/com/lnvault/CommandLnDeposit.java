@@ -40,13 +40,16 @@ public class CommandLnDeposit implements CommandExecutor {
         if (args.length != 1) return false;
         
         var player = (Player)cs;
-        
         var state = LnVault.getPlayerState(player, LnVault.getCtx());
-        if( state.getPaymentRequest() != null) return false; //Only allow 1 payment to be pending.
-        
+               
         try
         {
             LnVault.putLnVaultMapInHand(player);
+            
+            if( state.getPaymentRequest() != null) {  //Only allow 1 payment to be pending.
+                player.chat("Previous deposit is still pending payment.");
+                return true;
+            }
             
             var localAmount = Double.parseDouble(args[0]);
             var satsAmount = LnVault.convertLocalToSats(localAmount);

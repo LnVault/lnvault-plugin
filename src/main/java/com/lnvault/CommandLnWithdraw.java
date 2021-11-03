@@ -51,11 +51,12 @@ public class CommandLnWithdraw implements CommandExecutor {
        
         var state = LnVault.getPlayerState(player, LnVault.getCtx());
 
-        if (state.getWithdrawalRequest() != null) {
-            return false; //Only allow 1 withdrawal to be pending.
-        }
         try {
             LnVault.putLnVaultMapInHand(player);        
+            if (state.getWithdrawalRequest() != null) { //Only allow 1 withdrawal to be pending.
+                player.chat("Previous withdrawal is still pending.");
+                return true; 
+            }            
             
             var localAmount = Double.parseDouble(args[0]);
             var satsAmount = LnVault.convertLocalToSats(localAmount);
