@@ -84,7 +84,25 @@ public class InvoiceRenderer extends MapRenderer {
         {
             if(!playerState.getMapUpToDate())
             {
-                if(playerState.getError() != null)
+                if (playerState.getWithdrawalRequest() != null)
+                {
+                    var img = deepCopy(SEND_PAYMENT);
+                    var g = (Graphics2D)img.getGraphics();
+                    
+                    g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                    
+                    g.setFont(g.getFont().deriveFont(18f));
+                    
+                    drawCenteredString(g,"Receive", 24);
+                    drawCenteredString(g,"Withdrawal", 48);
+                    
+                    mc.drawImage(0, 0, img); 
+                    
+                    BufferedImage invoiceQr = QRCode.getQRCode(playerState.getWithdrawalRequest().getRequest());
+                    
+                    mc.drawImage((128 - invoiceQr.getWidth())/2, 64, invoiceQr);  
+                    
+                } else if(playerState.getError() != null)
                 {
                     var img = deepCopy(ERROR);
                     var g = (Graphics2D)img.getGraphics();
@@ -142,26 +160,7 @@ public class InvoiceRenderer extends MapRenderer {
                     BufferedImage invoiceQr = QRCode.getQRCode(playerState.getPaymentRequest().getRequest());
                     mc.drawImage((128 - invoiceQr.getWidth())/2, 61, invoiceQr);  
                     
-                }
-                else if (playerState.getWithdrawalRequest() != null)
-                {
-                    var img = deepCopy(SEND_PAYMENT);
-                    var g = (Graphics2D)img.getGraphics();
-                    
-                    g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-                    
-                    g.setFont(g.getFont().deriveFont(18f));
-                    
-                    drawCenteredString(g,"Receive", 24);
-                    drawCenteredString(g,"Withdrawal", 48);
-                    
-                    mc.drawImage(0, 0, img); 
-                    
-                    BufferedImage invoiceQr = QRCode.getQRCode(playerState.getWithdrawalRequest().getRequest());
-                    
-                    mc.drawImage((128 - invoiceQr.getWidth())/2, 64, invoiceQr);  
-                    
-                }                
+                }               
                 else
                 {
                     mc.drawImage(0, 0, IDLE);

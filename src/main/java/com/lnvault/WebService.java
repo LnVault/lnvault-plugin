@@ -14,6 +14,8 @@ import java.util.logging.Level;
 
 public class WebService {
     
+    private static int TIMEOUT_MILLIS = 1000;
+    
     public static void blockingCall(String url, String apiKey, String json, Function<String,?> then , Function<Exception,?> fail) {
         try
         {
@@ -21,6 +23,7 @@ public class WebService {
             URLConnection connection = new URL(url).openConnection();
             connection.setRequestProperty("Accept-Charset", charset);
             connection.setRequestProperty("Authorization", apiKey);
+            connection.setConnectTimeout(TIMEOUT_MILLIS);
             if( json != null )
             {
                 connection.setDoOutput(true); // Triggers POST.

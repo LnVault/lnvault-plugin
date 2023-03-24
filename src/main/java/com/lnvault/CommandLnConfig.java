@@ -53,7 +53,12 @@ public class CommandLnConfig implements CommandExecutor,TabCompleter {
                 }
                 case "set" -> {                    
                     if (args.length < 3) return false;
-                    LnVault.getCtx().getRepo().setConfig(args[1],args[2]);
+                    StringBuilder str = new StringBuilder(args[2]);
+                    for(int i = 3 ; i < args.length ; i++) {
+                        str.append(" ");
+                        str.append(args[i]);                              
+                    }
+                    LnVault.getCtx().getRepo().setConfig(args[1],str.toString());
                     return true;
                 }
                 default -> {

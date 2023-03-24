@@ -14,6 +14,7 @@ import com.lnvault.WebService;
 import com.lnvault.bolt11.Bolt11;
 import com.lnvault.data.PaymentRequest;
 import com.lnvault.data.WithdrawalRequest;
+import java.text.MessageFormat;
 import java.util.HashSet;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -115,19 +116,19 @@ public class OpenNodeBackend implements LnBackend {
                 return;
             }            
             
-            WebService.blockingCall("https://api.opennode.com/v1/withdrawals/", apiKey, null, (resStr) -> {
+            WebService.blockingCall("https://api.opennode.com/v2/withdrawals/", apiKey, null, (resStr) -> {
                 try {
 
-                    var res = new JsonParser().parse(resStr).getAsJsonObject();
-                    var data = res.get("data").getAsJsonArray();
-
+                    var res = new JsonParser().parse(resStr).getAsJsonObject();                  
+                    var data = res.get("data").getAsJsonObject().get("items").getAsJsonArray();
+                    
                     processedWithdrawals.clear();
                     for (var wd : data) {
 
-                        var wdObj = wd.getAsJsonObject();
-
-                        var status = wdObj.get("status").getAsString();
-                        if ("confirmed".equals(status)) {
+                        var wdObj = wd.getAsJsonObject();                     
+                        
+                        var status = wdObj.get("status").getAsString();                        
+                        if ("confirmed".equals(status)) {                          
                             var referenceInvoice = wdObj.get("reference").getAsString();
                             var description = Bolt11.ExtractDescription(referenceInvoice);
                             processedWithdrawals.add(description);
@@ -143,11 +144,11 @@ public class OpenNodeBackend implements LnBackend {
             },
             (e) -> {
                 //This will cause a players withdrawal requests to stall.
-                ctx.getLogger().log(Level.WARNING,e.getMessage(),e);
+                ctx.getLogger().log(Level.WARNING,"updateWithdrawals:" + e.getMessage(),e);
                 return null;
             });
         } catch (Exception e) {
-             ctx.getLogger().log(Level.WARNING, e.getMessage(), e);
+             ctx.getLogger().log(Level.WARNING, "updateWithdrawals:" +e.getMessage(), e);
         }            
     }
     
@@ -159,7 +160,14 @@ public class OpenNodeBackend implements LnBackend {
 
     public boolean isWithdrawn(WithdrawalRequest wdReq) {
         if (wdReq == null) return false;
-        return processedWithdrawals.contains(wdReq.getDescription());
+        
+        for( String processedWithdrawal : processedWithdrawals ) {
+            if( processedWithdrawal.contains(wdReq.getId() ) ) {
+                return true;
+            }           
+        }
+        
+        return false;
     }
     
     public void generatePaymentRequest(Player player, long satsAmount , double localAmount, Function<PaymentRequest,?> generated , Function<Exception,?> fail ) {
@@ -171,10 +179,16 @@ public class OpenNodeBackend implements LnBackend {
                 fail.apply(new Exception("opennode.deposit.key is not configured."));
                 return;
             }
+            
+            var descFmt = ctx.getRepo().getConfig("deposit.description");
+            if( descFmt == null ){
+                descFmt = "LnVault Deposit ${0}";
+            } 
+            var description = MessageFormat.format(descFmt,localAmount);            
 
             var reqObj = new JsonObject();
             reqObj.addProperty("amount", satsAmount);
-            reqObj.addProperty("description", "LnVault Deposit $" + localAmount);
+            reqObj.addProperty("description", description);
             
             var req = new Gson().toJson(reqObj);
             
@@ -222,10 +236,15 @@ public class OpenNodeBackend implements LnBackend {
             if( apiKey == null ){
                 fail.apply(new Exception("opennode.withdraw.key is not configured."));
                 return;
-            }            
+            }
+
+            var descFmt = ctx.getRepo().getConfig("withdrawal.description");
+            if( descFmt == null ){
+                descFmt = "LnVault Withdrawal ${0} {1}";
+            } 
 
             var id = UUID.randomUUID().toString();
-            var description = "LnVault Withdrawal $" + localAmount + " " + id;
+            var description = MessageFormat.format(descFmt,localAmount,id);
             
             var reqObj = new JsonObject();
             reqObj.addProperty("min_amt", satsAmount);
@@ -252,6 +271,9 @@ public class OpenNodeBackend implements LnBackend {
                     wdReq.setRequest(lnurl);
                     wdReq.setSatsAmount(satsAmount);
                     wdReq.setLocalAmount(localAmount);
+                    
+                    var now = System.currentTimeMillis();
+                    wdReq.setExpiresAt(now + (1 * 60 * 1000) );
 
                     generated.apply(wdReq);
                 }

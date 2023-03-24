@@ -10,6 +10,7 @@ public class WithdrawalRequest {
     private long satsAmount;
     private double localAmount;
     private long TimeStamp;
+    private long ExpiresAt;
     private UUID PlayerUUID;    
 
     public String getRequest() {
@@ -60,6 +61,14 @@ public class WithdrawalRequest {
     public void setTimeStamp(long TimeStamp) {
         this.TimeStamp = TimeStamp;
     }
+    
+    public long getExpiresAt() {
+        return ExpiresAt;
+    }
+
+    public void setExpiresAt(long TimeStamp) {
+        this.ExpiresAt = TimeStamp;
+    }    
 
     public UUID getPlayerUUID() {
         return PlayerUUID;

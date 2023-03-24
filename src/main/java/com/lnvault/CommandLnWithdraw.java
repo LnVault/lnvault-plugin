@@ -24,6 +24,8 @@ import java.net.http.HttpClient;
 import java.util.HashSet;
 import java.util.UUID;
 import java.util.logging.Level;
+import net.milkbowl.vault.economy.EconomyResponse;
+import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -53,10 +55,6 @@ public class CommandLnWithdraw implements CommandExecutor {
 
         try {
             LnVault.putLnVaultMapInHand(player);        
-            if (state.getWithdrawalRequest() != null) { //Only allow 1 withdrawal to be pending.
-                player.chat("Previous withdrawal is still pending.");
-                return true; 
-            }            
             
             var localAmount = Double.parseDouble(args[0]);
             var satsAmount = LnVault.convertLocalToSats(localAmount);
@@ -94,6 +92,15 @@ public class CommandLnWithdraw implements CommandExecutor {
                                     LnVault.getCtx().getRepo().auditWithdrawalRequest(wdReq, false);
 
                                     state.setWithdrawalRequest(wdReq);
+                                   
+                                    //Deduct from the balance immediately as we cannot reliably detect a confirmed withdrawal as some wallets modify the description causing the id to be lost
+                                    //If we are ever able to detect an error we can re-add the deducted amount back to the uesers balance
+                                    var response = LnVault.getCtx().getEconomy().withdrawPlayer(player, wdReq.getLocalAmount());
+                                    if( response.type != EconomyResponse.ResponseType.SUCCESS )                        
+                                    {
+                                        state.setWithdrawalError("Error", wdReq.getTimeStamp());
+                                    }                                    
+                                    
                                 }
                                 catch(Exception e)
                                 {

@@ -44,6 +44,8 @@ public class LnVault extends JavaPlugin implements Listener, Runnable {
     {
         CommandLnConfig.CONFIG_KEYS.add("vault.exchangerate");
         CommandLnConfig.CONFIG_KEYS.add("vault.joingreeting");
+        CommandLnConfig.CONFIG_KEYS.add("withdrawal.description");
+        CommandLnConfig.CONFIG_KEYS.add("deposit.description");
     }
     
     
@@ -224,28 +226,24 @@ public class LnVault extends JavaPlugin implements Listener, Runnable {
                 var isWithdrawn = CommandLnWithdraw.isWithdrawn(wdReq);
 
                 if( isWithdrawn ) {
-                    var player = Bukkit.getPlayer(playerState.getPlayerId());
-
-                    var response = ctx.getEconomy().withdrawPlayer(player, wdReq.getLocalAmount());
-
-                    if( response.type == EconomyResponse.ResponseType.SUCCESS )                        
+                    try
                     {
-                        try
-                        {
-                            wdReq.setTimeStamp(System.currentTimeMillis());
-                            LnVault.ctx.getRepo().auditWithdrawalRequest(wdReq, true);
-
-                            playerState.setWithdrawalSent(wdReq.getTimeStamp());
-                        }
-                        catch(Exception e)
-                        {
-                            playerState.setPaymentError("Error", wdReq.getTimeStamp());
-                        }
-                    } else {
-                        playerState.setPaymentError("Error", wdReq.getTimeStamp());
+                        wdReq.setTimeStamp(now);
+                        LnVault.ctx.getRepo().auditWithdrawalRequest(wdReq, true);
+                        playerState.setWithdrawalSent(wdReq.getTimeStamp());
                     }
+                    catch(Exception e)
+                    {
+                        playerState.setWithdrawalError("Error", now);
+                    }
+                    
                 } else {
-                    foundPendingWithdrawal = true;
+                    if(wdReq.getExpiresAt() != 0 && now > wdReq.getExpiresAt() ) {
+                        wdReq.setTimeStamp(now);
+                        playerState.setWithdrawalError("Expired",now);
+                    } else {
+                        foundPendingWithdrawal = true;
+                    }
                 }
             }
             
