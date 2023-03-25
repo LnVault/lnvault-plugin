@@ -25,4 +25,6 @@ public interface LnBackend {
     public void generatePaymentRequest(Player player, long satsAmount , double localAmount, Function<PaymentRequest,?> generated, Function<Exception,?> fail ,Function<PaymentRequest,?> confirmed);
     
     public void generateWithdrawal(Player player, long satsAmount, double localAmount, Function<WithdrawalRequest,?> generated, Function<Exception,?> fail,Function<WithdrawalRequest,?> confirmed);
+    
+    public void generateWithdrawal(Player player, long satsAmount, String prBech32, Function<WithdrawalRequest,?> generated, Function<Exception,?> fail,Function<WithdrawalRequest,?> confirmed);
 }

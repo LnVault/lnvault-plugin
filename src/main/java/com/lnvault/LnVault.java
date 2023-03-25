@@ -81,6 +81,11 @@ public class LnVault extends JavaPlugin implements Listener, Runnable {
             this.getCommand("lnconfig").setExecutor(lnconfigCmd);
             this.getCommand("lnconfig").setTabCompleter(lnconfigCmd);
 
+            var lnuserConfigCmd = new CommandLnUserConfig();
+            this.getCommand("lnuser").setExecutor(lnuserConfigCmd);
+            this.getCommand("lnuser").setTabCompleter(lnuserConfigCmd);
+            
+            
             var economy = getEconomy();
             var repo = new Repository();
             

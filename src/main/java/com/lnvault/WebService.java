@@ -22,7 +22,9 @@ public class WebService {
             String charset = "UTF-8";
             URLConnection connection = new URL(url).openConnection();
             connection.setRequestProperty("Accept-Charset", charset);
-            connection.setRequestProperty("Authorization", apiKey);
+            if( apiKey != null ) {
+                connection.setRequestProperty("Authorization", apiKey);
+            }
             connection.setConnectTimeout(TIMEOUT_MILLIS);
             if( json != null )
             {

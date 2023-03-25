@@ -98,9 +98,11 @@ public class InvoiceRenderer extends MapRenderer {
                     
                     mc.drawImage(0, 0, img); 
                     
-                    BufferedImage invoiceQr = QRCode.getQRCode(playerState.getWithdrawalRequest().getRequest());
-                    
-                    mc.drawImage((128 - invoiceQr.getWidth())/2, 64, invoiceQr);  
+                    var pr = playerState.getWithdrawalRequest().getRequest();
+                    if( pr != null ) { //Request is null in the case of lnaddress
+                        BufferedImage invoiceQr = QRCode.getQRCode(pr);                   
+                        mc.drawImage((128 - invoiceQr.getWidth())/2, 64, invoiceQr);  
+                    }
                     
                 } else if(playerState.getError() != null)
                 {

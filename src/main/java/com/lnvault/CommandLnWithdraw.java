@@ -21,6 +21,9 @@ import java.math.BigDecimal;
 import java.net.URL;
 import java.net.URLConnection;
 import java.net.http.HttpClient;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.UUID;
 import java.util.logging.Level;
@@ -36,6 +39,8 @@ public class CommandLnWithdraw implements CommandExecutor {
     static
     {
         CommandLnConfig.CONFIG_KEYS.add("withdrawal.limit");
+        
+        CommandLnUserConfig.CONFIG_KEYS.add("lnaddress");
     }
     
     @Override
@@ -82,45 +87,142 @@ public class CommandLnWithdraw implements CommandExecutor {
                             return null;
                         }                    
 
-                        LnVault.getCtx().getLnBackend().generateWithdrawal(player, satsAmount,localAmount,
-                            (wdReq) -> {
-                                try
-                                {
-                                    wdReq.setPlayerUUID(player.getUniqueId());
-                                    wdReq.setTimeStamp(System.currentTimeMillis());               
-
-                                    LnVault.getCtx().getRepo().auditWithdrawalRequest(wdReq, false);
-
-                                    state.setWithdrawalRequest(wdReq);
-                                   
-                                    //Deduct from the balance immediately as we cannot reliably detect a confirmed withdrawal as some wallets modify the description causing the id to be lost
-                                    //If we are ever able to detect an error we can re-add the deducted amount back to the uesers balance
-                                    var response = LnVault.getCtx().getEconomy().withdrawPlayer(player, wdReq.getLocalAmount());
-                                    if( response.type != EconomyResponse.ResponseType.SUCCESS )                        
-                                    {
-                                        state.setWithdrawalError("Error", wdReq.getTimeStamp());
-                                    }                                    
+                        var lnaddress = LnVault.getCtx().getRepo().getUserConfig(player.getUniqueId().toString(), "lnaddress");                       
+                        if( lnaddress != null && !lnaddress.isEmpty() && lnaddress.contains("@")) {                           
+                            var digest = MessageDigest.getInstance("SHA-256");
+                            
+                            var split = lnaddress.split("@",2);
+                            WebService.call("https://" + split[1] + "/.well-known/lnurlp/" + split[0], null, null, 
+                                (body) -> {
+                                    LnVault.getCtx().getLogger().log(Level.WARNING, "LNADDRESS BODY:" + body);
                                     
-                                }
-                                catch(Exception e)
-                                {
+                                    var res = new JsonParser().parse(body).getAsJsonObject();                  
+                                    var tag = res.get("tag").getAsString();
+                                    if( !"payRequest".equals(tag)) {
+                                        LnVault.getCtx().getLogger().log(Level.WARNING, "LNADDRESS tag:");
+                                        return null;
+                                    }
+                                    
+                                    var callbackUrl = res.get("callback").getAsString();
+                                    var metadata = res.get("metadata").getAsString();
+                                    
+                                    var metadataHash = digest.digest(metadata.getBytes(StandardCharsets.UTF_8));
+                                    
+                                    WebService.call(callbackUrl + "?amount=" + (satsAmount*1000)  , null, null,
+                                    (lnurlBody) -> {
+                                        LnVault.getCtx().getLogger().log(Level.WARNING, "LNURL:" + lnurlBody);
+                                        try{
+                                            
+
+                                            var lnurlRes = new JsonParser().parse(lnurlBody).getAsJsonObject();                  
+                                            var pr = lnurlRes.get("pr").getAsString();
+                                            var prLnUrlHash = Bolt11.ExtractLnUrlPayHash(pr);
+
+                                            if( !Arrays.equals(metadataHash,prLnUrlHash) ) {
+                                                LnVault.getCtx().getLogger().log(Level.WARNING, "LNURL HASH:");
+                                                return null;
+                                            }
+                                            
+                                            LnVault.getCtx().getLnBackend().generateWithdrawal(player,satsAmount, pr, 
+                                                (wdReq) -> {
+                                                    try
+                                                    {
+                                                        wdReq.setPlayerUUID(player.getUniqueId());
+                                                        wdReq.setTimeStamp(System.currentTimeMillis());  
+                                                        wdReq.setLocalAmount(localAmount);
+                                                        wdReq.setSatsAmount(satsAmount);
+
+                                                        LnVault.getCtx().getRepo().auditWithdrawalRequest(wdReq, false);
+
+                                                        state.setWithdrawalRequest(wdReq);
+
+                                                        //Deduct from the balance immediately as we cannot reliably detect a confirmed withdrawal as some wallets modify the description causing the id to be lost
+                                                        //If we are ever able to detect an error we can re-add the deducted amount back to the uesers balance
+                                                        var response = LnVault.getCtx().getEconomy().withdrawPlayer(player, wdReq.getLocalAmount());
+                                                        if( response.type != EconomyResponse.ResponseType.SUCCESS )                        
+                                                        {
+                                                            state.setWithdrawalError("Error", wdReq.getTimeStamp());
+                                                        }                                    
+
+                                                    }
+                                                    catch(Exception e)
+                                                    {
+                                                        state.setWithdrawalError("Error", System.currentTimeMillis() );
+                                                        player.chat("lnwithdraw failed - " + e.getMessage() );
+                                                        LnVault.getCtx().getLogger().log(Level.WARNING, e.getMessage(), e);
+                                                    }
+                                                    return null;
+                                                },
+                                                (e) -> {
+                                                    state.setWithdrawalError("Error", System.currentTimeMillis() );
+                                                    player.chat("lnwithdraw failed - " + e.getMessage() );
+                                                    LnVault.getCtx().getLogger().log(Level.WARNING, e.getMessage(), e);
+                                                    return null;
+                                                },
+                                                (wdReq) -> {
+                                                    LnVault.confirmWithdrawal(wdReq);
+                                                    return null;
+                                                });
+
+                                            return null;
+                                        } catch (Exception e) {
+                                            LnVault.getCtx().getLogger().log(Level.WARNING, "LNURL ERROR:" + e.getMessage() ,e);
+                                            return null;
+                                        }
+                                    },
+                                    (e) -> {
+                                        LnVault.getCtx().getLogger().log(Level.WARNING, "LNURL ERROR:" + e.getMessage() ,e);
+                                        return null;
+                                    });
+                                    
+                                    
+                                    return null;
+                                },
+                                (e) -> {
+                                    LnVault.getCtx().getLogger().log(Level.WARNING, "LNADDRESS ERROR:" + e.getMessage() ,e);
+                                    return null;
+                                });                            
+                        } else {
+                            LnVault.getCtx().getLnBackend().generateWithdrawal(player, satsAmount,localAmount,
+                                (wdReq) -> {
+                                    try
+                                    {
+                                        wdReq.setPlayerUUID(player.getUniqueId());
+                                        wdReq.setTimeStamp(System.currentTimeMillis());               
+
+                                        LnVault.getCtx().getRepo().auditWithdrawalRequest(wdReq, false);
+
+                                        state.setWithdrawalRequest(wdReq);
+
+                                        //Deduct from the balance immediately as we cannot reliably detect a confirmed withdrawal as some wallets modify the description causing the id to be lost
+                                        //If we are ever able to detect an error we can re-add the deducted amount back to the uesers balance
+                                        var response = LnVault.getCtx().getEconomy().withdrawPlayer(player, wdReq.getLocalAmount());
+                                        if( response.type != EconomyResponse.ResponseType.SUCCESS )                        
+                                        {
+                                            state.setWithdrawalError("Error", wdReq.getTimeStamp());
+                                        }                                    
+
+                                    }
+                                    catch(Exception e)
+                                    {
+                                        state.setWithdrawalError("Error", System.currentTimeMillis() );
+                                        player.chat("lnwithdraw failed - " + e.getMessage() );
+                                        LnVault.getCtx().getLogger().log(Level.WARNING, e.getMessage(), e);
+                                    }
+                                    return null;
+                                },
+                                (e) -> {
                                     state.setWithdrawalError("Error", System.currentTimeMillis() );
                                     player.chat("lnwithdraw failed - " + e.getMessage() );
                                     LnVault.getCtx().getLogger().log(Level.WARNING, e.getMessage(), e);
+                                    return null;
+                                },
+                                (wdReq) -> {
+                                    LnVault.confirmWithdrawal(wdReq);
+                                    return null;
                                 }
-                                return null;
-                            },
-                            (e) -> {
-                                state.setWithdrawalError("Error", System.currentTimeMillis() );
-                                player.chat("lnwithdraw failed - " + e.getMessage() );
-                                LnVault.getCtx().getLogger().log(Level.WARNING, e.getMessage(), e);
-                                return null;
-                            },
-                            (wdReq) -> {
-                                LnVault.confirmWithdrawal(wdReq);
-                                return null;
-                            }
-                        );
+                            );
+                        }
                     }
                     catch(Exception ex)
                     {

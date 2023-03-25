@@ -1,5 +1,5 @@
 name: LnVault
-version: 1.0
+version: 1.3
 main: com.lnvault.LnVault
 api-version: 1.17
 depend: [Vault]
@@ -17,3 +17,6 @@ commands:
       description: Lightning Network Config
       usage: /lnconfig [get|set] name [value]
       permission: lnvault.config
+   lnuser:
+      description: Lightning Network User Config
+      usage: /lnuser [get|set] name [value]

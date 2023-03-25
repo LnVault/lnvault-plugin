@@ -55,6 +55,13 @@ public class Repository {
         }
     }
     
+    private void createUserSettingsTable() throws Exception
+    {
+        if( !tableExists("USERCONFIG") ) {
+            this.crudConn.createStatement().execute("CREATE TABLE USERCONFIG (PLAYER TEXT,NAME TEXT,VALUE TEXT, PRIMARY KEY(PLAYER,NAME));");
+        }
+    }    
+    
     
     public Repository() throws Exception
     {
@@ -65,6 +72,7 @@ public class Repository {
 
         createSettingsTable();
         createTxAuditTable();
+        createUserSettingsTable();
     }
     
     public String getConfig(String name) throws Exception {
@@ -90,6 +98,32 @@ public class Repository {
             }
         }
     }
+    
+    public String getUserConfig(String playerUUID,String name) throws Exception {
+        synchronized(crudLock)
+        {
+            try( var stmt = crudConn.prepareStatement("SELECT VALUE FROM USERCONFIG WHERE PLAYER=? AND NAME=?;") ) {
+                stmt.setString(1, playerUUID);
+                stmt.setString(2, name);
+                try ( var res = stmt.executeQuery() ) {
+                    if( !res.next() ) return null;
+                    return res.getString(1);
+                }
+            }
+        }
+    }
+    
+    public void setUserConfig(String playerUUID,String name , String value) throws Exception {
+        synchronized(crudLock)
+        {
+            try( var stmt = crudConn.prepareStatement("INSERT INTO USERCONFIG(PLAYER,NAME,VALUE) VALUES(?,?,?) ON CONFLICT(PLAYER,NAME) DO UPDATE SET VALUE=excluded.VALUE;") ) {
+                stmt.setString(1, playerUUID);
+                stmt.setString(2, name);
+                stmt.setString(3, value);
+                stmt.execute();
+            }
+        }
+    }    
     
     public void auditPaymentRequest(PaymentRequest pReq,boolean paid) throws Exception {
         synchronized(crudLock)
