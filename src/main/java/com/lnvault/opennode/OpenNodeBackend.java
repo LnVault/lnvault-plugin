@@ -14,7 +14,9 @@ import com.lnvault.WebService;
 import com.lnvault.bolt11.Bolt11;
 import com.lnvault.data.PaymentRequest;
 import com.lnvault.data.WithdrawalRequest;
+import java.net.URI;
 import java.text.MessageFormat;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -23,19 +25,32 @@ import java.util.logging.Level;
 import org.bukkit.entity.Player;
 
 public class OpenNodeBackend implements LnBackend {
-
+  record WithdrawalRequestFunction(WithdrawalRequest withdrawal, Function<WithdrawalRequest,?> confirmed) {}  
+  record PaymentRequestFunction(PaymentRequest payment, Function<PaymentRequest,?> confirmed) {}  
+    
+    
     static
     {
         CommandLnConfig.CONFIG_KEYS.add("opennode.deposit.key");
         CommandLnConfig.CONFIG_KEYS.add("opennode.withdraw.key");
+        CommandLnConfig.CONFIG_KEYS.add("opennode.callback.url");
+        CommandLnConfig.CONFIG_KEYS.add("opennode.callback.port");
     }
     
     private Context ctx;
     private long lastPaymentRequestPoll = 0;
     
-    private HashSet<String> processedPaymentRequests = new HashSet<String>();
-    private HashSet<String> processedWithdrawals = new HashSet<String>();
+    private HashMap<String,PaymentRequestFunction> pendingPaymentRequests = new HashMap<>();    
+    private HashMap<String,WithdrawalRequestFunction> pendingWithdrawals = new HashMap<>();
     
+    private String getCallbackUrl(String path) throws Exception {
+        var callbackUrl = ctx.getRepo().getConfig("opennode.callback.url");
+        if( callbackUrl == null || callbackUrl.isEmpty() ) {
+            return null;
+        }
+        
+        return new URI(callbackUrl).resolve(path).toString();   
+    }
     
     public void init(Context ctx)
     {
@@ -53,6 +68,12 @@ public class OpenNodeBackend implements LnBackend {
             }
         },2,2,TimeUnit.SECONDS);
         
+        try {
+            OpenNodeWebHookHandler.init(ctx,this);
+        } catch( Exception e) {
+            ctx.getLogger().log(Level.WARNING,"OpenNodeWebHookHandler" + e.getMessage(),e);
+        }       
+        
     }
     
     private void updatePaymentRequests()
@@ -63,9 +84,19 @@ public class OpenNodeBackend implements LnBackend {
             if( apiKey == null ){
                 return;
             }
+
+            var now = System.currentTimeMillis();
+            
+            var cleanup = pendingPaymentRequests.values().iterator();
+            while( cleanup.hasNext()) {
+                var pending = cleanup.next();
+                if( pending.payment.getExpiresAt() != 0 && now > (pending.payment.getExpiresAt() + (2 * 60 * 1000)) ){
+                    ctx.getLogger().log(Level.INFO, "Cleaned up expired payment " + pending.payment.getId());
+                    cleanup.remove();
+                }
+            }            
             
             //Backoff on Payment polling
-            var now = System.currentTimeMillis();
             var payReqTimeStamp = ctx.getMostRecentPaymentRequestTimeStamp();
             var timeSincePaymentRequest = now - payReqTimeStamp;
             var scaled = (long)(0.1 * (double)timeSincePaymentRequest); //At 10 minutes poll once per minute
@@ -81,7 +112,6 @@ public class OpenNodeBackend implements LnBackend {
                     var res = new JsonParser().parse(resStr).getAsJsonObject();
                     var data = res.get("data").getAsJsonArray();
 
-                    processedPaymentRequests.clear();
                     for( var pr : data ) {
 
                         var prObj = pr.getAsJsonObject();
@@ -89,7 +119,7 @@ public class OpenNodeBackend implements LnBackend {
                         var id = prObj.get("id").getAsString();
                         var status = prObj.get("status").getAsString();
                         if( "paid".equals(status) ) {
-                            processedPaymentRequests.add(id);
+                            confirmPayment(id);
                         }
                     }
 
@@ -99,8 +129,7 @@ public class OpenNodeBackend implements LnBackend {
                     //This will cause a players payment requests to stall.
                     ctx.getLogger().log(Level.WARNING,e.getMessage(),e);
                     return null;
-                });
-
+                });            
         }
         catch( Exception e)
         {
@@ -114,7 +143,18 @@ public class OpenNodeBackend implements LnBackend {
             var apiKey = ctx.getRepo().getConfig("opennode.withdraw.key");
             if( apiKey == null ){
                 return;
-            }            
+            }
+
+            var now = System.currentTimeMillis();
+            
+            var cleanup = pendingWithdrawals.values().iterator();
+            while( cleanup.hasNext()) {
+                var pendingWithdrawal = cleanup.next();
+                if( now > pendingWithdrawal.withdrawal.getExpiresAt() ){
+                    ctx.getLogger().log(Level.INFO, "Cleaned up expired withdrawal" + pendingWithdrawal.withdrawal.getId());
+                    cleanup.remove();
+                }
+            }
             
             WebService.blockingCall("https://api.opennode.com/v2/withdrawals/", apiKey, null, (resStr) -> {
                 try {
@@ -122,7 +162,6 @@ public class OpenNodeBackend implements LnBackend {
                     var res = new JsonParser().parse(resStr).getAsJsonObject();                  
                     var data = res.get("data").getAsJsonObject().get("items").getAsJsonArray();
                     
-                    processedWithdrawals.clear();
                     for (var wd : data) {
 
                         var wdObj = wd.getAsJsonObject();                     
@@ -131,8 +170,16 @@ public class OpenNodeBackend implements LnBackend {
                         if ("confirmed".equals(status)) {                          
                             var referenceInvoice = wdObj.get("reference").getAsString();
                             var description = Bolt11.ExtractDescription(referenceInvoice);
-                            processedWithdrawals.add(description);
-
+                            
+                            var i = pendingWithdrawals.values().iterator();
+                            while( i.hasNext()) {
+                                var pendingWithdrawal = i.next();
+                                if( description.contains(pendingWithdrawal.withdrawal.getId()) ){
+                                    i.remove();
+                                    ctx.getLogger().log(Level.INFO, "batch confirmed withdrawal " + pendingWithdrawal.withdrawal.getId());
+                                    pendingWithdrawal.confirmed.apply(pendingWithdrawal.withdrawal);
+                                }
+                            }
                         }
                     }
                 } catch (Exception e) {
@@ -146,31 +193,29 @@ public class OpenNodeBackend implements LnBackend {
                 //This will cause a players withdrawal requests to stall.
                 ctx.getLogger().log(Level.WARNING,"updateWithdrawals:" + e.getMessage(),e);
                 return null;
-            });
+            });            
         } catch (Exception e) {
              ctx.getLogger().log(Level.WARNING, "updateWithdrawals:" +e.getMessage(), e);
         }            
     }
-    
-    public boolean isPaid(PaymentRequest payReq)
-    {
-        if( payReq == null ) return true;
-        return processedPaymentRequests.contains(payReq.getId());    
-    }
 
-    public boolean isWithdrawn(WithdrawalRequest wdReq) {
-        if (wdReq == null) return false;
-        
-        for( String processedWithdrawal : processedWithdrawals ) {
-            if( processedWithdrawal.contains(wdReq.getId() ) ) {
-                return true;
-            }           
+    public void confirmPayment(String paymentId) {
+        var pendingPayment = pendingPaymentRequests.remove(paymentId);      
+        if( pendingPayment != null ) {
+            ctx.getLogger().log(Level.INFO, "confirmed payment " + paymentId);        
+            pendingPayment.confirmed.apply(pendingPayment.payment);
         }
-        
-        return false;
+    }    
+    
+    public void confirmWithdrawal(String withdrawalId) {
+        var pendingWithdrawal = pendingWithdrawals.remove(withdrawalId);      
+        if( pendingWithdrawal != null ) {
+            ctx.getLogger().log(Level.INFO, "hook confirmed withdrawal " + withdrawalId);        
+            pendingWithdrawal.confirmed.apply(pendingWithdrawal.withdrawal);
+        }
     }
     
-    public void generatePaymentRequest(Player player, long satsAmount , double localAmount, Function<PaymentRequest,?> generated , Function<Exception,?> fail ) {
+    public void generatePaymentRequest(Player player, long satsAmount , double localAmount, Function<PaymentRequest,?> generated , Function<Exception,?> fail ,Function<PaymentRequest,?> confirmed) {
         
         try
         {
@@ -189,6 +234,7 @@ public class OpenNodeBackend implements LnBackend {
             var reqObj = new JsonObject();
             reqObj.addProperty("amount", satsAmount);
             reqObj.addProperty("description", description);
+            reqObj.addProperty("callback_url", getCallbackUrl("/deposit/"));
             
             var req = new Gson().toJson(reqObj);
             
@@ -212,7 +258,9 @@ public class OpenNodeBackend implements LnBackend {
                     payReq.setExpiresAt(expiresAt);
                     payReq.setSatsAmount(satsAmount);
                     payReq.setLocalAmount(localAmount);
+                    payReq.setPlayerUUID(player.getUniqueId());
 
+                    pendingPaymentRequests.put(id, new PaymentRequestFunction(payReq,confirmed));
                     generated.apply(payReq);
                 }
                 catch(Exception e)
@@ -228,7 +276,7 @@ public class OpenNodeBackend implements LnBackend {
         }
     }
     
-    public void generateWithdrawal(Player player, long satsAmount, double localAmount, Function<WithdrawalRequest,?> generated, Function<Exception,?> fail) {
+    public void generateWithdrawal(Player player, long satsAmount, double localAmount, Function<WithdrawalRequest,?> generated, Function<Exception,?> fail,Function<WithdrawalRequest,?> confirmed) {
         
         try
         {
@@ -249,8 +297,8 @@ public class OpenNodeBackend implements LnBackend {
             var reqObj = new JsonObject();
             reqObj.addProperty("min_amt", satsAmount);
             reqObj.addProperty("max_amt", satsAmount);
-            reqObj.addProperty("description", description);
-            reqObj.addProperty("callback_url", "");
+            reqObj.addProperty("description", description);           
+            reqObj.addProperty("callback_url", getCallbackUrl("/withdraw/" + id));
             reqObj.addProperty("external_id", id);
             
             var req = new Gson().toJson(reqObj);
@@ -271,10 +319,12 @@ public class OpenNodeBackend implements LnBackend {
                     wdReq.setRequest(lnurl);
                     wdReq.setSatsAmount(satsAmount);
                     wdReq.setLocalAmount(localAmount);
+                    wdReq.setPlayerUUID(player.getUniqueId());
                     
                     var now = System.currentTimeMillis();
                     wdReq.setExpiresAt(now + (1 * 60 * 1000) );
 
+                    pendingWithdrawals.put(wdReq.getId(), new WithdrawalRequestFunction(wdReq, confirmed));
                     generated.apply(wdReq);
                 }
                 catch (Exception e) {

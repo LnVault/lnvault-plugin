@@ -115,6 +115,10 @@ public class CommandLnWithdraw implements CommandExecutor {
                                 player.chat("lnwithdraw failed - " + e.getMessage() );
                                 LnVault.getCtx().getLogger().log(Level.WARNING, e.getMessage(), e);
                                 return null;
+                            },
+                            (wdReq) -> {
+                                LnVault.confirmWithdrawal(wdReq);
+                                return null;
                             }
                         );
                     }
@@ -143,10 +147,4 @@ public class CommandLnWithdraw implements CommandExecutor {
             return false;
         }
     }
-
-    public static boolean isWithdrawn(WithdrawalRequest wdReq) {
-        if (wdReq == null) return true;
-        return LnVault.getCtx().getLnBackend().isWithdrawn(wdReq);
-    }
-
 }

@@ -61,6 +61,11 @@ public class CommandLnConfig implements CommandExecutor,TabCompleter {
                     LnVault.getCtx().getRepo().setConfig(args[1],str.toString());
                     return true;
                 }
+                case "clear" -> {                    
+                    if (args.length < 2) return false;                   
+                    LnVault.getCtx().getRepo().setConfig(args[1],"");
+                    return true;
+                }
                 default -> {
                     return false;
                 }
@@ -78,7 +83,7 @@ public class CommandLnConfig implements CommandExecutor,TabCompleter {
         switch(params.length)
         {
             case 1:
-                return Arrays.asList("get","set");
+                return Arrays.asList("get","set","clear");
             case 2:
                 return CONFIG_KEYS;
             default:

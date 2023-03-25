@@ -7,7 +7,9 @@ package com.lnvault;
 
 import com.lnvault.bolt11.Bech32;
 import com.lnvault.bolt11.Bolt11;
+import com.lnvault.data.PaymentRequest;
 import com.lnvault.data.PlayerState;
+import com.lnvault.data.WithdrawalRequest;
 import com.lnvault.opennode.OpenNodeBackend;
 import com.lnvault.repository.Repository;
 import java.sql.DriverManager;
@@ -177,6 +179,55 @@ public class LnVault extends JavaPlugin implements Listener, Runnable {
         return econ;
     }
 
+    public static void confirmPayment(PaymentRequest payReq) {   
+        var playerState = stateMap.get(payReq.getPlayerUUID());
+        if(playerState == null) {
+            ctx.getLogger().log(Level.WARNING, "player not found for confirmed payment " + payReq.getId());
+            return;
+        }
+        
+        var now = System.currentTimeMillis();
+        
+        try
+        {
+            
+            LnVault.ctx.getRepo().auditPaymentRequest(payReq, true);
+            payReq.setPaidTimeStamp(now);
+
+            var player = Bukkit.getPlayer(playerState.getPlayerId());
+            var response = ctx.getEconomy().depositPlayer(player, payReq.getLocalAmount());
+            if( response.type == EconomyResponse.ResponseType.SUCCESS )                        
+            {
+                playerState.setPaymentReceived(now);
+            } else {
+                playerState.setPaymentError("Error", now);
+            }
+        }
+        catch(Exception e)
+        {
+            playerState.setPaymentError("Error", now);
+        }        
+    }
+    
+    public static void confirmWithdrawal(WithdrawalRequest wdReq) {
+        var playerState = stateMap.get(wdReq.getPlayerUUID());
+        if(playerState == null) {
+            ctx.getLogger().log(Level.WARNING, "player not found for confirmed withdrawal " + wdReq.getId());
+            return;
+        }
+
+        try                
+        {
+            wdReq.setTimeStamp(System.currentTimeMillis());
+            ctx.getRepo().auditWithdrawalRequest(wdReq, true);
+            playerState.setWithdrawalSent(wdReq.getTimeStamp());
+        }
+        catch(Exception e)
+        {
+            playerState.setWithdrawalError("Error", System.currentTimeMillis());
+        }
+    }
+    
     private static void updatePlayerStates(Context ctx)
     {
         boolean foundPendingPayment = false;
@@ -189,62 +240,24 @@ public class LnVault extends JavaPlugin implements Listener, Runnable {
             
             if (playerState.getPaymentRequest() != null) {
                 var payReq = playerState.getPaymentRequest();
-                var isPaid = CommandLnDeposit.isPaid(payReq);
-                if( isPaid ) {
-                    try
-                    {
-                        LnVault.ctx.getRepo().auditPaymentRequest(payReq, true);
-                        payReq.setPaidTimeStamp(now);
 
-                        var player = Bukkit.getPlayer(playerState.getPlayerId());
-                        var response = ctx.getEconomy().depositPlayer(player, payReq.getLocalAmount());
-                        if( response.type == EconomyResponse.ResponseType.SUCCESS )                        
-                        {
-                            playerState.setPaymentReceived(now);
-                        } else {
-                            playerState.setPaymentError("Error", now);
-                        }
-                    }
-                    catch(Exception e)
-                    {
-                        playerState.setPaymentError("Error", now);
-                    }
+                if(payReq.getExpiresAt() != 0 && now > (payReq.getExpiresAt() + (2 * 60 * 1000)) ) { //2 minute grace period after expriy incase payment is underway.
+                    playerState.setPaymentError("Expired",now);
                 } else {
-                    if(payReq.getExpiresAt() != 0 && now > (payReq.getExpiresAt() + (2 * 60 * 1000)) ) { //2 minute grace period after expriy incase payment is underway.
-                        playerState.setPaymentError("Expired",now);
-                    } else {
-                        foundPendingPayment = true;
-                        maxPendingPaymentTimeStamp = Math.max(maxPendingPaymentTimeStamp,payReq.getCreatedTimeStamp());
-                    }                        
-                }
+                    foundPendingPayment = true;
+                    maxPendingPaymentTimeStamp = Math.max(maxPendingPaymentTimeStamp,payReq.getCreatedTimeStamp());
+                }                        
             }
 
-            if (playerState.getWithdrawalRequest() != null) {
-                
+            if (playerState.getWithdrawalRequest() != null) {               
                 var wdReq = playerState.getWithdrawalRequest();
-
-                var isWithdrawn = CommandLnWithdraw.isWithdrawn(wdReq);
-
-                if( isWithdrawn ) {
-                    try
-                    {
-                        wdReq.setTimeStamp(now);
-                        LnVault.ctx.getRepo().auditWithdrawalRequest(wdReq, true);
-                        playerState.setWithdrawalSent(wdReq.getTimeStamp());
-                    }
-                    catch(Exception e)
-                    {
-                        playerState.setWithdrawalError("Error", now);
-                    }
-                    
+                
+                if(wdReq.getExpiresAt() != 0 && now > wdReq.getExpiresAt() ) {
+                    wdReq.setTimeStamp(now);
+                    playerState.setWithdrawalError("Expired",now);
                 } else {
-                    if(wdReq.getExpiresAt() != 0 && now > wdReq.getExpiresAt() ) {
-                        wdReq.setTimeStamp(now);
-                        playerState.setWithdrawalError("Expired",now);
-                    } else {
-                        foundPendingWithdrawal = true;
-                    }
-                }
+                    foundPendingWithdrawal = true;
+                }                
             }
             
             ctx.setPaymentRequestActive(foundPendingPayment,maxPendingPaymentTimeStamp);

@@ -94,6 +94,10 @@ public class CommandLnDeposit implements CommandExecutor {
                                 player.chat("lndeposit failed - " + e.getMessage() );
                                 LnVault.getCtx().getLogger().log(Level.WARNING, e.getMessage(), e);
                                 return null;
+                            },
+                            (payReq) -> {
+                                LnVault.confirmPayment(payReq);
+                                return null;
                             }
                         ); 
                     }  
@@ -124,13 +128,4 @@ public class CommandLnDeposit implements CommandExecutor {
             return false;
         }
     }
-    
-
-    
-    public static boolean isPaid(PaymentRequest payReq)
-    {
-        if( payReq == null ) return true;
-        return  LnVault.getCtx().getLnBackend().isPaid(payReq);
-    }
-
 }
