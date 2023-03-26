@@ -32,7 +32,7 @@ public class CommandLnUserConfig implements CommandExecutor,TabCompleter {
             switch(args[0]) {
                 case "get" -> {
                     var res = LnVault.getCtx().getRepo().getUserConfig(player.getUniqueId().toString(), args[1]);
-                    player.chat(args[1] + "=" + (res != null ? res : ""));
+                    player.sendMessage(args[1] + "=" + (res != null ? res : ""));
                     return true;
                 }
                 case "set" -> {                    
