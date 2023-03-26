@@ -1,6 +1,9 @@
 package com.lnvault;
 
 import java.util.logging.Level;
+import net.md_5.bungee.api.ChatColor;
+import net.md_5.bungee.api.chat.ClickEvent;
+import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -63,6 +66,15 @@ public class CommandLnDeposit implements CommandExecutor {
 
                                     LnVault.getCtx().getRepo().auditPaymentRequest(payReq, false);
                                     state.setPaymentRequest(payReq);
+                                    
+                                    if(payReq.getRequest()!=null) {
+                                        TextComponent msg = new TextComponent( "Deposit - ");                                       
+                                        TextComponent copy = new TextComponent( "[Copy to clipboard]" );
+                                        copy.setColor(ChatColor.GREEN);                                      
+                                        copy.setClickEvent( new ClickEvent( ClickEvent.Action.COPY_TO_CLIPBOARD, payReq.getRequest() ) );
+                                       
+                                        player.spigot().sendMessage(msg,copy);
+                                    }
                                 }
                                 catch(Exception e)
                                 {

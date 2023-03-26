@@ -27,6 +27,9 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.UUID;
 import java.util.logging.Level;
+import net.md_5.bungee.api.ChatColor;
+import net.md_5.bungee.api.chat.ClickEvent;
+import net.md_5.bungee.api.chat.TextComponent;
 import net.milkbowl.vault.economy.EconomyResponse;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
@@ -221,10 +224,19 @@ public class CommandLnWithdraw implements CommandExecutor {
                                         var response = LnVault.getCtx().getEconomy().withdrawPlayer(player, wdReq.getLocalAmount());
                                         if( response.type != EconomyResponse.ResponseType.SUCCESS )                        
                                         {
-                                            LnVault.getCtx().getLogger().log(Level.WARNING, "economyWithdrawPlayer :" + response.errorMessage);
+                                            LnVault.getCtx().getLogger().log(Level.WARNING, "economyWithdrawPlayer :{0}", response.errorMessage);
                                             state.setWithdrawalError("Error", wdReq.getTimeStamp());
                                             player.sendMessage("Withdrawal failed." + response.errorMessage);                                                               
-                                        }                                    
+                                        } else {
+                                            if(wdReq.getRequest()!=null) {                                                                                              
+                                                TextComponent msg = new TextComponent( "Withdrawal - ");                                       
+                                                TextComponent copy = new TextComponent( "[Copy to clipboard]" );
+                                                copy.setColor(ChatColor.GREEN);                                      
+                                                copy.setClickEvent( new ClickEvent( ClickEvent.Action.COPY_TO_CLIPBOARD, wdReq.getRequest() ) );
+
+                                                player.spigot().sendMessage(msg,copy);
+                                            }
+                                        }                                  
 
                                     }
                                     catch(Exception e)
