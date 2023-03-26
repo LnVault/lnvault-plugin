@@ -274,7 +274,9 @@ public class OpenNodeBackend implements LnBackend {
                 }
                 catch(Exception e)
                 {
-                    fail.apply(e);
+                    LnVault.getCtx().getMinecraftQueue().add(() -> {
+                        fail.apply(e);
+                    });                    
                 }
                 return null;
             } , fail);
@@ -330,7 +332,9 @@ public class OpenNodeBackend implements LnBackend {
                     generated.apply(wdReq);
                 }
                 catch (Exception e) {
-                    fail.apply(e);
+                    LnVault.getCtx().getMinecraftQueue().add(() -> {
+                        fail.apply(e);
+                    });
                 }
 
                 return null;
@@ -395,7 +399,9 @@ public class OpenNodeBackend implements LnBackend {
                     generated.apply(wdReq);
                 }
                 catch (Exception e) {
-                    fail.apply(e);
+                    LnVault.getCtx().getMinecraftQueue().add(() -> {
+                        fail.apply(e);
+                    });
                 }
 
                 return null;

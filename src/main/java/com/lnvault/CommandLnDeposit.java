@@ -1,25 +1,5 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package com.lnvault;
 
-import com.lnvault.data.PaymentRequest;
-import com.lnvault.data.PlayerState;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import com.google.zxing.common.BitMatrix;
-import com.google.zxing.qrcode.QRCodeWriter;
-import java.awt.image.BufferedImage;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.math.BigDecimal;
-import java.net.URL;
-import java.net.URLConnection;
-import java.net.http.HttpClient;
-import java.util.HashSet;
 import java.util.logging.Level;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -46,8 +26,8 @@ public class CommandLnDeposit implements CommandExecutor {
         {
             LnVault.putLnVaultMapInHand(player);
             
-            if( state.getPaymentRequest() != null) {  //Only allow 1 payment to be pending.
-                player.chat("Previous deposit is still pending payment.");
+            if( state.getPaymentRequest() != null) {  //Only allow 1 payment to be pending.              
+                player.sendMessage("Previous deposit is still pending payment.");
                 return true;
             }
             
@@ -61,12 +41,13 @@ public class CommandLnDeposit implements CommandExecutor {
                     {
                         long limit = 1000;
                         var limitStr = LnVault.getCtx().getRepo().getConfig("deposit.limit");
-                        if( limitStr != null && limitStr != "") {
+                        if( limitStr != null && !limitStr.isEmpty()) {
                             limit = Long.parseLong(limitStr);
                         }
 
                         if(totalDeposits + satsAmount > limit) {
-                            player.chat("Deposit will exceeded daily deposit limit.");
+                            player.sendMessage("Deposit will exceeds daily deposit limit.");
+                            state.setPaymentError("Error", System.currentTimeMillis());
                             return null;
                         }
 
@@ -82,17 +63,17 @@ public class CommandLnDeposit implements CommandExecutor {
                                 }
                                 catch(Exception e)
                                 {
-                                    state.setPaymentError("Error", System.currentTimeMillis() );
-                                    player.chat("lndeposit failed - " + e.getMessage() );
-                                    LnVault.getCtx().getLogger().log(Level.WARNING,e.getMessage(),e);
+                                    LnVault.getCtx().getLogger().log(Level.WARNING, "CommandLnDeposit " + e.getMessage(),e);
+                                    state.setPaymentError("Error", System.currentTimeMillis());
+                                    player.sendMessage("Deposit failed.");                                   
                                 }
 
                                 return null;
                             },
                             (e) -> {
-                                state.setPaymentError("Error", System.currentTimeMillis() );
-                                player.chat("lndeposit failed - " + e.getMessage() );
-                                LnVault.getCtx().getLogger().log(Level.WARNING, e.getMessage(), e);
+                                LnVault.getCtx().getLogger().log(Level.WARNING, "CommandLnDeposit " + e.getMessage(),e);
+                                state.setPaymentError("Error", System.currentTimeMillis());
+                                player.sendMessage("Deposit failed.");                                   
                                 return null;
                             },
                             (payReq) -> {
@@ -103,17 +84,17 @@ public class CommandLnDeposit implements CommandExecutor {
                     }  
                     catch( Exception ex)
                     {
-                        state.setWithdrawalError("Error", System.currentTimeMillis() );
-                        player.chat("lndeposit failed - " + ex.getMessage() );
-                        LnVault.getCtx().getLogger().log(Level.WARNING,ex.getMessage(),ex);
+                        LnVault.getCtx().getLogger().log(Level.WARNING, "CommandLnDeposit " + ex.getMessage(),ex);
+                        state.setPaymentError("Error", System.currentTimeMillis());
+                        player.sendMessage("Deposit failed.");                                   
                     }                    
 
                     return null;                
                 },
                 (e) -> {
-                    state.setPaymentError("Error", System.currentTimeMillis() );
-                    player.chat("lndeposit failed - " + e.getMessage() );
-                    LnVault.getCtx().getLogger().log(Level.WARNING, e.getMessage(), e);
+                    LnVault.getCtx().getLogger().log(Level.WARNING, "CommandLnDeposit " + e.getMessage(),e);
+                    state.setPaymentError("Error", System.currentTimeMillis());
+                    player.sendMessage("Deposit failed.");                                   
                     return null;
                 }
             );
@@ -122,10 +103,10 @@ public class CommandLnDeposit implements CommandExecutor {
         }
         catch( Exception e)
         {
-            state.setWithdrawalError("Error", System.currentTimeMillis() );
-            player.chat("lndeposit failed - " + e.getMessage() );
-            LnVault.getCtx().getLogger().log(Level.WARNING,e.getMessage(),e);
-            return false;
+            LnVault.getCtx().getLogger().log(Level.WARNING, "CommandLnDeposit " + e.getMessage(),e);
+            state.setPaymentError("Error", System.currentTimeMillis());
+            player.sendMessage("Deposit failed.");
+            return true;
         }
     }
 }

@@ -73,8 +73,9 @@ public class CommandLnConfig implements CommandExecutor,TabCompleter {
         }
         catch( Exception e)
         {
-            LnVault.getCtx().getLogger().log(Level.WARNING,e.getMessage(),e);
-            return false;
+            LnVault.getCtx().getLogger().log(Level.WARNING, "CommandLnConfig " + e.getMessage(),e);
+            player.sendMessage("Config failed. " + e.getMessage()); 
+            return true;
         }
     }
 

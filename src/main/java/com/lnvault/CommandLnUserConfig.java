@@ -5,24 +5,8 @@
  */
 package com.lnvault;
 
-import com.lnvault.data.PaymentRequest;
-import com.lnvault.data.PlayerState;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import com.google.zxing.common.BitMatrix;
-import com.google.zxing.qrcode.QRCodeWriter;
-import com.lnvault.repository.Repository;
-import java.awt.image.BufferedImage;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.math.BigDecimal;
-import java.net.URL;
-import java.net.URLConnection;
-import java.net.http.HttpClient;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
 import java.util.logging.Level;
 import org.bukkit.command.Command;
@@ -73,8 +57,9 @@ public class CommandLnUserConfig implements CommandExecutor,TabCompleter {
         }
         catch( Exception e)
         {
-            LnVault.getCtx().getLogger().log(Level.WARNING,e.getMessage(),e);
-            return false;
+            LnVault.getCtx().getLogger().log(Level.WARNING, "CommandLnUserConfig " + e.getMessage(),e);
+            player.sendMessage("User config failed."); 
+            return true;
         }
     }
 

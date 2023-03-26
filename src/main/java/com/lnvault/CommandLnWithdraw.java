@@ -67,7 +67,9 @@ public class CommandLnWithdraw implements CommandExecutor {
             var curBalance = LnVault.getCtx().getEconomy().getBalance(player);
 
             if( localAmount > curBalance) {
-                return false;
+                state.setWithdrawalError("Error", System.currentTimeMillis() );
+                player.sendMessage("Withdrawal exceeds current balance.");              
+                return true;
             }
 
             LnVault.getCtx().getRepo().getTotalWithdrawalsSince(player.getUniqueId() , System.currentTimeMillis() - (1000 * 60 * 60 *24) 
@@ -77,13 +79,13 @@ public class CommandLnWithdraw implements CommandExecutor {
                     {            
                         long limit = 1000;
                         var limitStr = LnVault.getCtx().getRepo().getConfig("withdrawal.limit");
-                        if( limitStr != null && limitStr != "") {
+                        if( limitStr != null && !limitStr.isEmpty()) {
                             limit = Long.parseLong(limitStr);
                         }
 
                         if(totalWithdrawls + satsAmount > limit) {
                             state.setWithdrawalError("Error", System.currentTimeMillis() );
-                            player.chat("Withdrawal will exceed daily withdrawal limit.");
+                            player.sendMessage("Withdrawal exceeds daily withdrawal limit.");
                             return null;
                         }                    
 
@@ -94,92 +96,112 @@ public class CommandLnWithdraw implements CommandExecutor {
                             var split = lnaddress.split("@",2);
                             WebService.call("https://" + split[1] + "/.well-known/lnurlp/" + split[0], null, null, 
                                 (body) -> {
-                                    LnVault.getCtx().getLogger().log(Level.WARNING, "LNADDRESS BODY:" + body);
-                                    
-                                    var res = new JsonParser().parse(body).getAsJsonObject();                  
-                                    var tag = res.get("tag").getAsString();
-                                    if( !"payRequest".equals(tag)) {
-                                        LnVault.getCtx().getLogger().log(Level.WARNING, "LNADDRESS tag:");
-                                        return null;
-                                    }
-                                    
-                                    var callbackUrl = res.get("callback").getAsString();
-                                    var metadata = res.get("metadata").getAsString();
-                                    
-                                    var metadataHash = digest.digest(metadata.getBytes(StandardCharsets.UTF_8));
-                                    
-                                    WebService.call(callbackUrl + "?amount=" + (satsAmount*1000)  , null, null,
-                                    (lnurlBody) -> {
-                                        LnVault.getCtx().getLogger().log(Level.WARNING, "LNURL:" + lnurlBody);
-                                        try{
-                                            
+                                    try {
+                                        //LnVault.getCtx().getLogger().log(Level.WARNING, "LNADDRESS BODY:" + body);
 
-                                            var lnurlRes = new JsonParser().parse(lnurlBody).getAsJsonObject();                  
-                                            var pr = lnurlRes.get("pr").getAsString();
-                                            var prLnUrlHash = Bolt11.ExtractLnUrlPayHash(pr);
-
-                                            if( !Arrays.equals(metadataHash,prLnUrlHash) ) {
-                                                LnVault.getCtx().getLogger().log(Level.WARNING, "LNURL HASH:");
-                                                return null;
-                                            }
-                                            
-                                            LnVault.getCtx().getLnBackend().generateWithdrawal(player,satsAmount, pr, 
-                                                (wdReq) -> {
-                                                    try
-                                                    {
-                                                        wdReq.setPlayerUUID(player.getUniqueId());
-                                                        wdReq.setTimeStamp(System.currentTimeMillis());  
-                                                        wdReq.setLocalAmount(localAmount);
-                                                        wdReq.setSatsAmount(satsAmount);
-
-                                                        LnVault.getCtx().getRepo().auditWithdrawalRequest(wdReq, false);
-
-                                                        state.setWithdrawalRequest(wdReq);
-
-                                                        //Deduct from the balance immediately as we cannot reliably detect a confirmed withdrawal as some wallets modify the description causing the id to be lost
-                                                        //If we are ever able to detect an error we can re-add the deducted amount back to the uesers balance
-                                                        var response = LnVault.getCtx().getEconomy().withdrawPlayer(player, wdReq.getLocalAmount());
-                                                        if( response.type != EconomyResponse.ResponseType.SUCCESS )                        
-                                                        {
-                                                            state.setWithdrawalError("Error", wdReq.getTimeStamp());
-                                                        }                                    
-
-                                                    }
-                                                    catch(Exception e)
-                                                    {
-                                                        state.setWithdrawalError("Error", System.currentTimeMillis() );
-                                                        player.chat("lnwithdraw failed - " + e.getMessage() );
-                                                        LnVault.getCtx().getLogger().log(Level.WARNING, e.getMessage(), e);
-                                                    }
-                                                    return null;
-                                                },
-                                                (e) -> {
-                                                    state.setWithdrawalError("Error", System.currentTimeMillis() );
-                                                    player.chat("lnwithdraw failed - " + e.getMessage() );
-                                                    LnVault.getCtx().getLogger().log(Level.WARNING, e.getMessage(), e);
-                                                    return null;
-                                                },
-                                                (wdReq) -> {
-                                                    LnVault.confirmWithdrawal(wdReq);
-                                                    return null;
-                                                });
-
-                                            return null;
-                                        } catch (Exception e) {
-                                            LnVault.getCtx().getLogger().log(Level.WARNING, "LNURL ERROR:" + e.getMessage() ,e);
+                                        var res = new JsonParser().parse(body).getAsJsonObject();                  
+                                        var tag = res.get("tag").getAsString();
+                                        if( !"payRequest".equals(tag)) {
+                                            LnVault.getCtx().getLogger().log(Level.WARNING, "LNURL HASH mismatch");
+                                            state.setWithdrawalError("Error", System.currentTimeMillis());
+                                            player.sendMessage("Withdrawal failed.");                                              
                                             return null;
                                         }
-                                    },
-                                    (e) -> {
-                                        LnVault.getCtx().getLogger().log(Level.WARNING, "LNURL ERROR:" + e.getMessage() ,e);
+
+                                        var callbackUrl = res.get("callback").getAsString();
+                                        var metadata = res.get("metadata").getAsString();
+
+                                        var metadataHash = digest.digest(metadata.getBytes(StandardCharsets.UTF_8));
+
+                                        WebService.call(callbackUrl + "?amount=" + (satsAmount*1000)  , null, null,
+                                        (lnurlBody) -> {
+                                            //LnVault.getCtx().getLogger().log(Level.WARNING, "LNURL:" + lnurlBody);
+                                            try{
+
+
+                                                var lnurlRes = new JsonParser().parse(lnurlBody).getAsJsonObject();                  
+                                                var pr = lnurlRes.get("pr").getAsString();
+                                                var prLnUrlHash = Bolt11.ExtractLnUrlPayHash(pr);
+
+                                                if( !Arrays.equals(metadataHash,prLnUrlHash) ) {
+                                                    LnVault.getCtx().getLogger().log(Level.WARNING, "LNURL HASH mismatch");
+                                                    state.setWithdrawalError("Error", System.currentTimeMillis());
+                                                    player.sendMessage("Withdrawal failed.");                                                     
+                                                    return null;
+                                                }
+
+                                                LnVault.getCtx().getLnBackend().generateWithdrawal(player,satsAmount, pr, 
+                                                    (wdReq) -> {
+                                                        try
+                                                        {
+                                                            wdReq.setPlayerUUID(player.getUniqueId());
+                                                            wdReq.setTimeStamp(System.currentTimeMillis());  
+                                                            wdReq.setLocalAmount(localAmount);
+                                                            wdReq.setSatsAmount(satsAmount);
+
+                                                            LnVault.getCtx().getRepo().auditWithdrawalRequest(wdReq, false);
+
+                                                            state.setWithdrawalRequest(wdReq);
+
+                                                            //Deduct from the balance immediately as we cannot reliably detect a confirmed withdrawal as some wallets modify the description causing the id to be lost
+                                                            //If we are ever able to detect an error we can re-add the deducted amount back to the uesers balance
+                                                            var response = LnVault.getCtx().getEconomy().withdrawPlayer(player, wdReq.getLocalAmount());
+                                                            if( response.type != EconomyResponse.ResponseType.SUCCESS )                        
+                                                            {
+                                                                LnVault.getCtx().getLogger().log(Level.WARNING, "LNURL economyWithdrawPlayer :" + response.errorMessage);
+                                                                state.setWithdrawalError("Error", wdReq.getTimeStamp());
+                                                                player.sendMessage("Withdrawal failed." + response.errorMessage);                                                               
+                                                            }                                    
+
+                                                        }
+                                                        catch(Exception e)
+                                                        {
+                                                            LnVault.getCtx().getLogger().log(Level.WARNING, e.getMessage(), e);
+                                                            state.setWithdrawalError("Error", System.currentTimeMillis() );
+                                                            player.sendMessage("Withdrawal failed.");
+                                                        }
+                                                        return null;
+                                                    },
+                                                    (e) -> {
+                                                        LnVault.getCtx().getLogger().log(Level.WARNING, "LNURL ERROR:" + e.getMessage() ,e);
+                                                        state.setWithdrawalError("Error", System.currentTimeMillis() );
+                                                        player.sendMessage("Withdrawal failed.");
+
+                                                        return null;
+                                                    },
+                                                    (wdReq) -> {
+                                                        LnVault.confirmWithdrawal(wdReq);
+                                                        return null;
+                                                    });
+
+                                                return null;
+                                            } catch (Exception e) {
+                                                LnVault.getCtx().getLogger().log(Level.WARNING, "LNURL ERROR:" + e.getMessage() ,e);
+                                                state.setWithdrawalError("Error", System.currentTimeMillis() );
+                                                player.sendMessage("Withdrawal failed.");                                                                                            
+                                                return null;
+                                            }
+                                        },
+                                        (e) -> {
+                                            LnVault.getCtx().getLogger().log(Level.WARNING, "LNURL ERROR:" + e.getMessage() ,e);
+                                            state.setWithdrawalError("Error", System.currentTimeMillis() );
+                                            player.sendMessage("Withdrawal failed.");                                             
+                                            return null;
+                                        });
+
+
                                         return null;
-                                    });
-                                    
-                                    
-                                    return null;
+                                    } catch (Exception e) {
+                                        LnVault.getCtx().getLogger().log(Level.WARNING, "lnaddress error:" + e.getMessage() ,e);
+                                        state.setWithdrawalError("Error", System.currentTimeMillis() );
+                                        player.sendMessage("Withdrawal failed.");                                       
+                                        return null;
+                                    }
                                 },
                                 (e) -> {
                                     LnVault.getCtx().getLogger().log(Level.WARNING, "LNADDRESS ERROR:" + e.getMessage() ,e);
+                                    state.setWithdrawalError("Error", System.currentTimeMillis() );
+                                    player.sendMessage("Withdrawal failed.");                                    
                                     return null;
                                 });                            
                         } else {
@@ -199,22 +221,24 @@ public class CommandLnWithdraw implements CommandExecutor {
                                         var response = LnVault.getCtx().getEconomy().withdrawPlayer(player, wdReq.getLocalAmount());
                                         if( response.type != EconomyResponse.ResponseType.SUCCESS )                        
                                         {
+                                            LnVault.getCtx().getLogger().log(Level.WARNING, "economyWithdrawPlayer :" + response.errorMessage);
                                             state.setWithdrawalError("Error", wdReq.getTimeStamp());
+                                            player.sendMessage("Withdrawal failed." + response.errorMessage);                                                               
                                         }                                    
 
                                     }
                                     catch(Exception e)
                                     {
-                                        state.setWithdrawalError("Error", System.currentTimeMillis() );
-                                        player.chat("lnwithdraw failed - " + e.getMessage() );
-                                        LnVault.getCtx().getLogger().log(Level.WARNING, e.getMessage(), e);
+                                        LnVault.getCtx().getLogger().log(Level.WARNING, "generateWithdrawal " + e.getMessage(),e);
+                                        state.setWithdrawalError("Error", System.currentTimeMillis());
+                                        player.sendMessage("Withdrawal failed.");
                                     }
                                     return null;
                                 },
                                 (e) -> {
-                                    state.setWithdrawalError("Error", System.currentTimeMillis() );
-                                    player.chat("lnwithdraw failed - " + e.getMessage() );
-                                    LnVault.getCtx().getLogger().log(Level.WARNING, e.getMessage(), e);
+                                    LnVault.getCtx().getLogger().log(Level.WARNING, "generateWithdrawal " + e.getMessage(),e);
+                                    state.setWithdrawalError("Error", System.currentTimeMillis());
+                                    player.sendMessage("Withdrawal failed.");
                                     return null;
                                 },
                                 (wdReq) -> {
@@ -226,27 +250,27 @@ public class CommandLnWithdraw implements CommandExecutor {
                     }
                     catch(Exception ex)
                     {
-                        state.setWithdrawalError("Error", System.currentTimeMillis() );
-                        player.chat("lnwithdraw failed - " + ex.getMessage() );
-                        LnVault.getCtx().getLogger().log(Level.WARNING, ex.getMessage(), ex);
+                        LnVault.getCtx().getLogger().log(Level.WARNING, "CommandLnWithdraw " + ex.getMessage(),ex);
+                        state.setWithdrawalError("Error", System.currentTimeMillis());
+                        player.sendMessage("Withdrawal failed.");
                     }
 
                     return null;
                 },
                 (e) -> {
-                    state.setWithdrawalError("Error", System.currentTimeMillis() );
-                    player.chat("lnwithdraw failed - " + e.getMessage() );
-                    LnVault.getCtx().getLogger().log(Level.WARNING, e.getMessage(), e);
+                    LnVault.getCtx().getLogger().log(Level.WARNING, "CommandLnWithdraw " + e.getMessage(),e);
+                    state.setWithdrawalError("Error", System.currentTimeMillis());
+                    player.sendMessage("Withdrawal failed.");
                     return null;
                 }
             );
 
             return true;
         } catch (Exception e) {
-            state.setWithdrawalError("Error", System.currentTimeMillis() );
-            player.chat("lnwithdraw failed - " + e.getMessage() );
-            LnVault.getCtx().getLogger().log(Level.WARNING, e.getMessage(), e);
-            return false;
+            LnVault.getCtx().getLogger().log(Level.WARNING, "CommandLnWithdraw " + e.getMessage(),e);
+            state.setWithdrawalError("Error", System.currentTimeMillis());
+            player.sendMessage("Withdrawal failed.");
+            return true;
         }
     }
 }
