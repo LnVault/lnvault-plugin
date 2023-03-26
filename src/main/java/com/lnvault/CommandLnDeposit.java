@@ -11,6 +11,9 @@ public class CommandLnDeposit implements CommandExecutor {
     static
     {
         CommandLnConfig.CONFIG_KEYS.add("deposit.limit");
+        
+        CommandLnConfig.CONFIG_KEYS.add("http.retries");
+        CommandLnConfig.CONFIG_KEYS.add("http.timeoutmillis");
     }
     
     @Override
